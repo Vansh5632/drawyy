@@ -111,3 +111,34 @@ export type Point = {
     users: User[];
     activeUser?: string;
   };
+  
+  // New types for collaboration
+  export type OperationType = 'create' | 'update' | 'delete' | 'batch';
+  
+  export type Operation = {
+    id: string;
+    type: OperationType;
+    data: any;
+    timestamp: number;
+    userId: string;
+    vectorClock: VectorClock;
+  };
+  
+  export type VectorClock = {
+    [userId: string]: number;
+  };
+  
+  export type WebSocketMessage = {
+    type: 'connect' | 'disconnect' | 'operation' | 'sync' | 'cursor' | 'error';
+    payload: any;
+    sender: string;
+    vectorClock?: VectorClock;
+  };
+  
+  export type DrawOperation = {
+    type: 'mousedown' | 'mousemove' | 'mouseup';
+    point: Point;
+    shapeId: string;
+    style?: StrokeStyle;
+    tool?: Tool;
+  };
