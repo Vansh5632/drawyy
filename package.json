@@ -11,6 +11,9 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "function-plot": "^1.25.1",
+    "mathjs": "^14.4.0",
+    "ml-matrix": "^6.12.1",
     "next": "15.3.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

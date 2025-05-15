@@ -155,3 +155,31 @@ export function batchRecognizeShapes(
   
   return results;
 }
+
+export function isMathExpression(points: Point[], tolerance: number = 0.3): {
+  isMath: boolean;
+  confidence: number;
+} {
+  // This would use heuristics to determine if the drawing looks like math
+  // For example, checking for patterns like horizontal lines (equals signs),
+  // vertical alignment, and symbol spacing that's common in equations
+  
+  // This is a placeholder implementation
+  const horizontalLines = detectHorizontalLines(points);
+  const hasSymbols = hasSymbolLikeStructures(points);
+  
+  const isMath = horizontalLines > 0 && hasSymbols;
+  const confidence = isMath ? 0.7 : 0.1;
+  
+  return { isMath, confidence };
+}
+
+function detectHorizontalLines(points: Point[]): number {
+  // Implementation to detect horizontal lines that could be equals signs
+  return 1; // Placeholder
+}
+
+function hasSymbolLikeStructures(points: Point[]): boolean {
+  // Implementation to detect patterns that resemble mathematical symbols
+  return true; // Placeholder
+}
