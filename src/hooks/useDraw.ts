@@ -1,19 +1,16 @@
 import { useState, useRef, useCallback } from "react";
-import { useRecoilState, useRecoilValue, useSetRecoilState } from "recoil";
-import { shapesState } from "@/state/atoms/shapes";
-import { toolState, strokeStyleState } from "@/state/atoms/tool";
-import { historyState } from "@/state/atoms/history";
-import { currentUserState } from "@/state/atoms/session";
+import { useStore } from "@/store";
 import { recognizeShape } from "@/lib/ai/shapeRecognition";
 import { Point, Shape, Tool, StrokeStyle } from "@/types/types";
 import useCollaboration from "./useCollaboration";
+import useUndoRedo from "./useUndoRedo";
 
 export default function useDraw() {
-  const [shapes, setShapes] = useRecoilState(shapesState);
-  const tool = useRecoilValue(toolState);
-  const strokeStyle = useRecoilValue(strokeStyleState);
-  const currentUser = useRecoilValue(currentUserState);
-  const setHistory = useSetRecoilState(historyState);
+  const shapes = useStore((state) => state.shapes);
+  const setShapes = useStore((state) => state.setShapes);
+  const tool = useStore((state) => state.tool);
+  const strokeStyle = useStore((state) => state.strokeStyle);
+  const currentUser = useStore((state) => state.currentUser);
   const { processDrawOperation } = useCollaboration();
 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -39,212 +36,222 @@ export default function useDraw() {
 
       // Create initial shape
       let newShape: Shape;
+      const baseShape = {
+        id: currentShapeId.current,
+        points: [point],
+        style: strokeStyle,
+        createdAt: Date.now(),
+        createdBy: currentUser?.id || "unknown",
+      };
 
-      // Add additional properties based on shape type
-      if (tool === "line" || tool === "arrow") {
-        newShape = {
-          id: currentShapeId.current,
-          type: tool as "line" | "arrow",
-          points: [point],
-          startPoint: point,
-          endPoint: point,
-          style: strokeStyle,
-          createdAt: Date.now(),
-          createdBy: currentUser.id,
-        };
-      } else if (tool === "rectangle") {
-        newShape = {
-          id: currentShapeId.current,
-          type: "rectangle",
-          points: [point],
-          topLeft: point,
-          width: 0,
-          height: 0,
-          style: strokeStyle,
-          createdAt: Date.now(),
-          createdBy: currentUser.id,
-        };
-      } else if (tool === "ellipse") {
-        newShape = {
-          id: currentShapeId.current,
-          type: "ellipse",
-          points: [point],
-          center: point,
-          radiusX: 0,
-          radiusY: 0,
-          style: strokeStyle,
-          createdAt: Date.now(),
-          createdBy: currentUser.id,
-        };
-      } else if (tool === "text") {
-        newShape = {
-          id: currentShapeId.current,
-          type: "text",
-          points: [point],
-          content: "",
-          position: point,
-          fontSize: 16,
-          fontFamily: "Arial",
-          style: strokeStyle,
-          createdAt: Date.now(),
-          createdBy: currentUser.id,
-        };
-      } else if (tool === "math") {
-        newShape = {
-          id: currentShapeId.current,
-          type: "math",
-          points: [point],
-          content: "",
-          position: point,
-          style: strokeStyle,
-          createdAt: Date.now(),
-          createdBy: currentUser.id,
-        };
-      } else {
-        // For freedraw or any other tool
-        newShape = {
-          id: currentShapeId.current,
-          type: "freedraw",
-          points: [point],
-          style: strokeStyle,
-          createdAt: Date.now(),
-          createdBy: currentUser.id,
-        };
+      switch (tool) {
+        case "freedraw":
+          newShape = {
+            ...baseShape,
+            type: "freedraw",
+          };
+          break;
+        case "line":
+          newShape = {
+            ...baseShape,
+            type: "line",
+            startPoint: point,
+            endPoint: point,
+          };
+          break;
+        case "rectangle":
+          newShape = {
+            ...baseShape,
+            type: "rectangle",
+            topLeft: point,
+            width: 0,
+            height: 0,
+          };
+          break;
+        case "ellipse":
+          newShape = {
+            ...baseShape,
+            type: "ellipse",
+            center: point,
+            radiusX: 0,
+            radiusY: 0,
+          };
+          break;
+        case "arrow":
+          newShape = {
+            ...baseShape,
+            type: "arrow",
+            startPoint: point,
+            endPoint: point,
+          };
+          break;
+        default:
+          return; // For non-drawing tools like select, pan, etc.
       }
 
-      setShapes((prev) => [...prev, newShape]);
-
-      // Send collaborative drawing operation
+      // Send operation to collaborators
       processDrawOperation({
         type: "mousedown",
         point,
         shapeId: currentShapeId.current,
         style: strokeStyle,
-        tool,
+        tool: tool,
       });
+
+      setShapes([...shapes, newShape]);
     },
-    [
-      currentUser,
-      tool,
-      strokeStyle,
-      setShapes,
-      generateId,
-      processDrawOperation,
-    ]
+    [shapes, setShapes, tool, strokeStyle, currentUser, generateId, processDrawOperation]
   );
 
   // Handle mouse move event
   const handleMouseMove = useCallback(
     (point: Point) => {
-      if (!isDrawing || !currentUser) return;
+      if (!isDrawing) return;
 
       setCurrentPath((prev) => [...prev, point]);
 
-      // Update the current shape
-      setShapes((prev) => {
-        return prev.map((shape) => {
-          if (shape.id === currentShapeId.current) {
-            const updatedShape = {
+      // Update shape based on tool
+      setShapes((prevShapes) => {
+        const shapeIndex = prevShapes.findIndex(
+          (s) => s.id === currentShapeId.current
+        );
+        if (shapeIndex === -1) return prevShapes;
+
+        const shape = prevShapes[shapeIndex];
+        let updatedShape: Shape;
+
+        switch (tool) {
+          case "freedraw":
+            updatedShape = {
               ...shape,
               points: [...shape.points, point],
             };
-
-            // Update type-specific properties
-            if (shape.type === "line" || shape.type === "arrow") {
-              (updatedShape as any).endPoint = point;
-            } else if (shape.type === "rectangle") {
-              const startPoint = shape.points[0];
-              (updatedShape as any).width = point.x - startPoint.x;
-              (updatedShape as any).height = point.y - startPoint.y;
-            } else if (shape.type === "ellipse") {
-              const startPoint = shape.points[0];
-              (updatedShape as any).radiusX = Math.abs(point.x - startPoint.x);
-              (updatedShape as any).radiusY = Math.abs(point.y - startPoint.y);
-            }
-
-            return updatedShape;
+            break;
+          case "line":
+            updatedShape = {
+              ...shape,
+              endPoint: point,
+              points: [shape.points[0], point],
+            };
+            break;
+          case "rectangle": {
+            const startPoint = shape.points[0];
+            updatedShape = {
+              ...shape,
+              width: point.x - startPoint.x,
+              height: point.y - startPoint.y,
+              points: [
+                startPoint,
+                { x: point.x, y: startPoint.y },
+                point,
+                { x: startPoint.x, y: point.y },
+              ],
+            };
+            break;
           }
-          return shape;
-        });
-      });
+          case "ellipse": {
+            const centerPoint = shape.points[0];
+            updatedShape = {
+              ...shape,
+              radiusX: Math.abs(point.x - centerPoint.x),
+              radiusY: Math.abs(point.y - centerPoint.y),
+              points: [centerPoint, point],
+            };
+            break;
+          }
+          case "arrow":
+            updatedShape = {
+              ...shape,
+              endPoint: point,
+              points: [shape.points[0], point],
+            };
+            break;
+          default:
+            return prevShapes;
+        }
 
-      // Send collaborative drawing operation
-      processDrawOperation({
-        type: "mousemove",
-        point,
-        shapeId: currentShapeId.current,
+        // Send operation to collaborators
+        processDrawOperation({
+          type: "mousemove",
+          point,
+          shapeId: currentShapeId.current,
+        });
+
+        const newShapes = [...prevShapes];
+        newShapes[shapeIndex] = updatedShape;
+        return newShapes;
       });
     },
-    [isDrawing, currentUser, setShapes, processDrawOperation]
+    [isDrawing, setShapes, tool, processDrawOperation]
   );
 
   // Handle mouse up event
   const handleMouseUp = useCallback(
     (point: Point) => {
-      if (!isDrawing || !currentUser) return;
+      if (!isDrawing) return;
 
       setIsDrawing(false);
 
-      // Finalize the shape
-      setShapes((prev) => {
-        const shapeToUpdate = prev.find((s) => s.id === currentShapeId.current);
+      // Finalize shape
+      setShapes((prevShapes) => {
+        const shapeIndex = prevShapes.findIndex(
+          (s) => s.id === currentShapeId.current
+        );
+        if (shapeIndex === -1) return prevShapes;
 
-        if (!shapeToUpdate) return prev;
+        const shape = prevShapes[shapeIndex];
+        let finalShape = shape;
 
-        // Only attempt shape recognition for freedraw
-        if (shapeToUpdate.type === "freedraw" && currentPath.length > 5) {
-          const recognized = recognizeShape(
-            currentPath,
-            shapeToUpdate.style,
-            currentUser.id
-          );
-
-          if (recognized && recognized.confidence > 0.7) {
-            // Replace with recognized shape
-            return prev.map((s) =>
-              s.id === currentShapeId.current ? recognized.recognizedShape : s
-            );
+        // For freedraw, try to recognize shape if it's a simple geometry
+        if (
+          tool === "freedraw" &&
+          shape.points.length > 2 &&
+          shape.points.length < 50
+        ) {
+          const recognizedShape = recognizeShape(shape);
+          if (recognizedShape && recognizedShape.confidence > 0.85) {
+            finalShape = {
+              ...recognizedShape.recognizedShape,
+              id: shape.id,
+              createdAt: shape.createdAt,
+              createdBy: shape.createdBy,
+              style: shape.style,
+            };
           }
         }
 
-        return prev;
-      });
+        // Create new array with updated shape
+        const newShapes = [...prevShapes];
+        newShapes[shapeIndex] = finalShape;
 
-      // Add to history
-      setHistory((prev) => [
-        ...prev,
-        {
-          shapes: [...shapes],
-          timestamp: Date.now(),
-        },
-      ]);
+        // Send operation to collaborators
+        processDrawOperation({
+          type: "mouseup",
+          point,
+          shapeId: currentShapeId.current,
+        });
+
+        // Save to history after a small delay to ensure state is settled
+        setTimeout(() => {
+          const { saveToHistory } = useUndoRedo();
+          saveToHistory(newShapes);
+        }, 0);
+
+        return newShapes;
+      });
 
       // Clear current path
       setCurrentPath([]);
-
-      // Send collaborative drawing operation
-      processDrawOperation({
-        type: "mouseup",
-        point,
-        shapeId: currentShapeId.current,
-      });
+      currentShapeId.current = "";
     },
-    [
-      isDrawing,
-      currentUser,
-      shapes,
-      currentPath,
-      setShapes,
-      setHistory,
-      processDrawOperation,
-    ]
+    [isDrawing, setShapes, tool, processDrawOperation, useUndoRedo]
   );
 
   return {
+    isDrawing,
+    currentPath,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
-    isDrawing,
-    currentPath,
   };
 }

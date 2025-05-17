@@ -1,15 +1,15 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
-import { shapesState } from '@/state/atoms/shapes';
-import { sessionState, currentUserState } from '@/state/atoms/session';
+import { useStore } from '@/store';
 import socketClient from '@/lib/collaboration/socket';
 import { createDiff, applyOperations } from '@/lib/collaboration/sync';
 import { Shape, Operation, WebSocketMessage, User, DrawOperation } from '@/types/types';
 
 export default function useCollaboration() {
-  const [shapes, setShapes] = useRecoilState(shapesState);
-  const [session, setSession] = useRecoilState(sessionState);
-  const currentUser = useRecoilValue(currentUserState);
+  const shapes = useStore(state => state.shapes);
+  const setShapes = useStore(state => state.setShapes);
+  const session = useStore(state => state.session);
+  const setSession = useStore(state => state.setSession);
+  const currentUser = useStore(state => state.currentUser);
   const lastSyncedShapes = useRef<Shape[]>([]);
   
   // Initialize WebSocket connection and listen for events
@@ -27,124 +27,100 @@ export default function useCollaboration() {
       const { users, operations } = message.payload;
       
       // Update session state with users
-      setSession(current => ({
-        ...current,
-        users: users
-      }));
+      setSession({
+        ...session,
+        users
+      });
       
       // Apply all operations to set initial state
       if (operations && operations.length) {
-        setShapes(currentShapes => applyOperations([], operations));
-        lastSyncedShapes.current = applyOperations([], operations);
+        // Apply operations and update lastSyncedShapes with the new state
+        setShapes(prevShapes => {
+          const newShapes = applyOperations([], operations);
+          lastSyncedShapes.current = [...newShapes];
+          return newShapes;
+        });
       }
     };
     
-    const handleUserJoined = (message: WebSocketMessage) => {
-      const user = message.payload.user as User;
+    const handleCursorUpdate = (message: WebSocketMessage) => {
+      const { userId, cursor } = message.payload;
       
-      setSession(current => ({
-        ...current,
-        users: [...current.users, user]
-      }));
-    };
-    
-    const handleUserLeft = (message: WebSocketMessage) => {
-      const userId = message.payload.userId as string;
-      
-      setSession(current => ({
-        ...current,
-        users: current.users.filter(u => u.id !== userId)
-      }));
-    };
-    
-    const handleCursor = (message: WebSocketMessage) => {
-      const { userId, position } = message.payload;
-      
-      setSession(current => ({
-        ...current,
-        users: current.users.map(user => 
+      // Update cursor position for the specified user
+      setSession(current => {
+        const updatedUsers = current.users.map(user => 
           user.id === userId 
-            ? { ...user, cursor: position, lastActive: Date.now() }
+            ? { ...user, cursor } 
             : user
-        )
-      }));
+        );
+        
+        return {
+          ...current,
+          users: updatedUsers
+        };
+      });
     };
     
     // Register event handlers
     socketClient.on('operation', handleOperation);
-    socketClient.on('session-state', handleSessionState);
-    socketClient.on('user-joined', handleUserJoined);
-    socketClient.on('user-left', handleUserLeft);
-    socketClient.on('cursor', handleCursor);
+    socketClient.on('sync', handleSessionState);
+    socketClient.on('cursor', handleCursorUpdate);
     
-    // Cleanup
+    // Cleanup on unmount
     return () => {
       socketClient.off('operation', handleOperation);
-      socketClient.off('session-state', handleSessionState);
-      socketClient.off('user-joined', handleUserJoined);
-      socketClient.off('user-left', handleUserLeft);
-      socketClient.off('cursor', handleCursor);
+      socketClient.off('sync', handleSessionState);
+      socketClient.off('cursor', handleCursorUpdate);
     };
-  }, [currentUser, setSession, setShapes]);
+  }, [setShapes, setSession, session, currentUser]);
   
-  // Join a session
-  const joinSession = useCallback((sessionId: string, user: User) => {
-    if (!sessionId || !user) return;
+  // Process and sync draw operations
+  const processDrawOperation = useCallback((drawOp: DrawOperation) => {
+    if (!currentUser) return;
     
-    socketClient.joinSession(sessionId, user);
+    // Create operation to sync
+    const operation: Operation = {
+      id: Math.random().toString(36).substring(2, 15),
+      type: 'update',
+      data: drawOp,
+      timestamp: Date.now(),
+      userId: currentUser.id,
+      vectorClock: socketClient.getVectorClock()
+    };
     
-    setSession(current => ({
-      ...current,
-      sessionId,
-      activeUser: user.id
-    }));
-  }, [setSession]);
+    // Send operation to all collaborators
+    socketClient.sendOperation(operation);
+  }, [currentUser]);
   
   // Update cursor position
-  const updateCursor = useCallback((position: { x: number, y: number }) => {
-    if (!session.sessionId || !currentUser) return;
-    socketClient.sendCursorPosition(position);
-  }, [session.sessionId, currentUser]);
+  const updateCursor = useCallback((position: {x: number, y: number}) => {
+    if (!currentUser) return;
+    
+    socketClient.sendCursorUpdate(currentUser.id, position);
+  }, [currentUser]);
   
-  // Process drawing operation
-  const processDrawOperation = useCallback((operation: DrawOperation) => {
-    if (!session.sessionId || !currentUser) return;
+  // Sync local changes with collaborators
+  const syncChanges = useCallback(() => {
+    if (!currentUser || shapes.length === 0) return;
     
-    // For now, we'll sync the entire shapes state periodically
-    const diff = createDiff(lastSyncedShapes.current, shapes);
+    // Create diff of current and last synced shapes
+    const operations = createDiff(lastSyncedShapes.current, shapes, currentUser.id);
     
-    if (diff.length > 0) {
-      diff.forEach(op => {
-        socketClient.sendOperation(op);
+    // Send operations if there are changes
+    if (operations.length > 0) {
+      operations.forEach(operation => {
+        socketClient.sendOperation(operation);
       });
+      
+      // Update last synced state
       lastSyncedShapes.current = [...shapes];
     }
-  }, [shapes, session.sessionId, currentUser]);
-  
-  // Synchronize shapes with server
-  useEffect(() => {
-    if (!session.sessionId || !currentUser) return;
-    
-    // Debounce sync to avoid too frequent updates
-    const syncTimeout = setTimeout(() => {
-      const diff = createDiff(lastSyncedShapes.current, shapes);
-      
-      if (diff.length > 0) {
-        diff.forEach(op => {
-          socketClient.sendOperation(op);
-        });
-        lastSyncedShapes.current = [...shapes];
-      }
-    }, 200);
-    
-    return () => clearTimeout(syncTimeout);
-  }, [shapes, session.sessionId, currentUser]);
+  }, [shapes, currentUser]);
   
   return {
-    joinSession,
-    updateCursor,
+    users: session?.users || [],
     processDrawOperation,
-    isConnected: session.sessionId !== '',
-    users: session.users
+    updateCursor,
+    syncChanges
   };
 }
