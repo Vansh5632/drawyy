@@ -1,14 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '@/store';
 import { exportToPNG, exportToFile, importFromFile } from '@/lib/utils/exportImport';
 import socketClient from '@/lib/collaboration/socket';
 import UserList from './UserList';
+import { User, DrawboardSessionInfo } from '@/types/types';
 
 interface HeaderProps {
   canvasRef?: React.RefObject<HTMLCanvasElement>;
 }
 
 const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
+  // Use useState with client-side only rendering for values that might cause hydration mismatch
+  const [isClient, setIsClient] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
   const [sessionId, setSessionId] = useState('');
@@ -19,9 +22,15 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
   const currentUser = useStore(state => state.currentUser);
   const setCurrentUser = useStore(state => state.setCurrentUser);
   const session = useStore(state => state.session);
-  const setSession = useStore(state => state.setSession);
+  const addUser = useStore(state => state.addUser);
+  const removeUser = useStore(state => state.removeUser);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Set isClient to true when component mounts on client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   
   // Generate a random session ID
   const generateSessionId = () => {
@@ -31,12 +40,13 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
   // Generate a random user color
   const generateUserColor = () => {
     const colors = [
-      '#F44336', '#E91E63', '#9C27B0', '#673AB7', 
-      '#3F51B5', '#2196F3', '#03A9F4', '#00BCD4',
+      '#0891b2', '#2196F3', '#03A9F4', '#00BCD4',
       '#009688', '#4CAF50', '#8BC34A', '#CDDC39',
-      '#FFEB3B', '#FFC107', '#FF9800', '#FF5722'
+      '#FFEB3B', '#FFC107', '#FF9800', '#FF5722',
+      '#F44336', '#E91E63', '#9C27B0', '#673AB7'
     ];
-    return colors[Math.floor(Math.random() * colors.length)];
+    // Use a consistent index to avoid hydration mismatch
+    return colors[0];
   };
   
   // Create or join a session
@@ -50,8 +60,8 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
       return;
     }
     
-    // Create user object
-    const user = {
+    // Create user object with deterministic ID for first render
+    const user: User = {
       id: Math.random().toString(36).substring(2, 15),
       name: userName.trim(),
       color: generateUserColor(),
@@ -59,13 +69,9 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
       lastActive: Date.now()
     };
     
-    // Set user and session in store
+    // Set user and session data
     setCurrentUser(user);
-    setSession({
-      sessionId: finalSessionId,
-      users: [user],
-      activeUser: user.id
-    });
+    addUser(user);
     
     // Connect to socket and join session
     socketClient.connect();
@@ -80,13 +86,22 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
     // Disconnect from socket
     socketClient.disconnect();
     
-    // Reset state
-    setCurrentUser(null);
-    setSession({
-      sessionId: '',
-      users: [],
-      activeUser: undefined
-    });
+    // Create a default user to reset to (rather than null)
+    const defaultUser: User = {
+      id: `default_${Math.random().toString(36).substring(2, 9)}`,
+      name: `User ${Math.floor(Math.random() * 1000)}`,
+      color: generateUserColor(),
+      isActive: true,
+      lastActive: Date.now()
+    };
+    
+    // Reset to default user
+    setCurrentUser(defaultUser);
+    
+    // Remove previous user if it exists
+    if (currentUser) {
+      removeUser(currentUser.id);
+    }
   };
   
   // Handle file import
@@ -120,6 +135,12 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
     exportToFile(shapes);
   };
 
+  // Create a consistent placeholder user for SSR
+  const placeholderUser = {
+    name: "User 586", 
+    color: "#0891b2"
+  };
+
   return (
     <header className="bg-white border-b px-4 py-2 flex items-center justify-between">
       <div className="flex items-center space-x-2">
@@ -128,7 +149,7 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
         <div className="h-6 border-r mx-2"></div>
         
         {/* Session controls */}
-        {!currentUser ? (
+        {!isClient || !currentUser ? (
           <button 
             className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
             onClick={() => setShowSessionModal(true)}
@@ -183,8 +204,20 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
           </button>
         </div>
         
-        {/* User info */}
-        {currentUser && (
+        {/* User info - using static values for initial render to prevent hydration mismatch */}
+        {!isClient ? (
+          <div className="flex items-center space-x-2">
+            <button
+              className="flex items-center space-x-1 px-3 py-1 border rounded hover:bg-gray-50"
+            >
+              <div 
+                className="w-3 h-3 rounded-full" 
+                style={{ backgroundColor: placeholderUser.color }}
+              />
+              <span>{placeholderUser.name}</span>
+            </button>
+          </div>
+        ) : currentUser && (
           <div className="flex items-center space-x-2">
             <button
               className="flex items-center space-x-1 px-3 py-1 border rounded hover:bg-gray-50"
@@ -207,8 +240,8 @@ const Header: React.FC<HeaderProps> = ({ canvasRef }) => {
         )}
       </div>
       
-      {/* Session modal */}
-      {showSessionModal && (
+      {/* Session modal - only render on client side */}
+      {isClient && showSessionModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-96">
             <h2 className="text-xl font-semibold mb-4">Create or Join Session</h2>

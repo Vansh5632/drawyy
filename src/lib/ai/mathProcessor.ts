@@ -10,7 +10,9 @@ import { MathResult, MathShape, Shape } from '@/types/types';
 export async function processMathShape(shape: MathShape): Promise<MathResult> {
   try {
     // Step 1: Recognize handwritten symbols from points
-    const recognizedExpression = await recognizeMathSymbols(shape.points);
+    const recognizedExpression = await recognizeMathSymbols(
+      Array.isArray(shape.points) ? shape.points : []
+    );
     
     // Step 2: Parse and evaluate the expression
     const { result, steps } = await evaluateMathExpression(recognizedExpression);
@@ -82,15 +84,24 @@ async function evaluateMathExpression(expression: string): Promise<{result: stri
 /**
  * Batch process multiple shapes to find and solve math expressions
  */
-export function findAndProcessMathShapes(shapes: Shape[]): Promise<MathResult[]> {
+export function findAndProcessMathShapes(prevShapes: Shape[] | any): Promise<MathResult[]> {
+  // Ensure shapes is an array before iteration
+  const shapes = Array.isArray(prevShapes) ? prevShapes : [];
+  
   // Handle case where shapes is not an array
-  if (!Array.isArray(shapes)) {
-    console.error('findAndProcessMathShapes received non-array shapes', shapes);
+  if (!Array.isArray(prevShapes)) {
+    console.error('findAndProcessMathShapes received non-array shapes', prevShapes);
     return Promise.resolve([]);
   }
   
   try {
-    const mathShapes = shapes.filter(shape => shape && shape.type === 'math') as MathShape[];
+    // Filter shapes and check each one is valid before casting to MathShape
+    const mathShapes = shapes.filter(shape => 
+      shape && 
+      typeof shape === 'object' && 
+      shape.type === 'math'
+    ) as MathShape[];
+    
     return Promise.all(mathShapes.map(processMathShape));
   } catch (error) {
     console.error('Error processing math shapes:', error);

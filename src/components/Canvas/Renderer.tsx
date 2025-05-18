@@ -44,19 +44,20 @@ const Renderer: React.FC<RendererProps> = ({ width, height, canvasRef: externalC
     drawGrid(ctx, canvas.width / viewport.scale, canvas.height / viewport.scale);
     
     // Ensure shapes is an array before iteration
+    const shapesToRender = Array.isArray(shapes) ? shapes : [];
     if (!Array.isArray(shapes)) {
       console.error('Renderer received non-array shapes', shapes);
-      ctx.restore();
-      return;
     }
     
     // Draw all shapes
-    shapes.forEach((shape) => {
-      drawShape(ctx, shape, shape.id === selectedShapeId);
+    shapesToRender.forEach((shape) => {
+      if (shape && typeof shape === 'object') {
+        drawShape(ctx, shape, shape.id === selectedShapeId);
+      }
     });
     
     // Draw math results
-    drawMathResults(ctx);
+    drawMathResults(ctx, shapesToRender);
     
     // Draw collaborator cursors
     drawCollaboratorCursors(ctx);
@@ -90,8 +91,9 @@ const Renderer: React.FC<RendererProps> = ({ width, height, canvasRef: externalC
   // Helper function to draw collaborator cursors
   const drawCollaboratorCursors = (ctx: CanvasRenderingContext2D) => {
     const currentUserId = useStore.getState().currentUser?.id;
+    const users = Array.isArray(session.users) ? session.users : [];
     
-    session.users.forEach((user: User) => {
+    users.forEach((user: User) => {
       // Don't draw current user's cursor
       if (user.id === currentUserId || !user.cursor || !user.isActive) return;
       
@@ -116,18 +118,16 @@ const Renderer: React.FC<RendererProps> = ({ width, height, canvasRef: externalC
   };
   
   // Helper function to draw math results
-  const drawMathResults = (ctx: CanvasRenderingContext2D) => {
+  const drawMathResults = (ctx: CanvasRenderingContext2D, shapesToRender: Shape[]) => {
     // Ensure mathResults is an array before iteration
+    const mathResultsToRender = Array.isArray(mathResults) ? mathResults : [];
+    
     if (!Array.isArray(mathResults)) {
       console.error('mathResults is not an array', mathResults);
-      return;
     }
 
-    mathResults.forEach((result) => {
-      // Skip if shapes is not an array
-      if (!Array.isArray(shapes)) return;
-
-      const mathShape = shapes.find(s => s.id === result.shapeId);
+    mathResultsToRender.forEach((result) => {
+      const mathShape = shapesToRender.find(s => s.id === result.shapeId);
       if (!mathShape || mathShape.type !== 'math') return;
       
       const { position } = mathShape;

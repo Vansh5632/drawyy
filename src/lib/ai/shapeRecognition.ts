@@ -25,7 +25,7 @@ export function recognizeShape(
   style: StrokeStyle,
   createdBy: string
 ): RecognizedShapeResult | null {
-  if (points.length < 3) return null;
+  if (!Array.isArray(points) || points.length < 3) return null;
   
   // Step 1: Preprocess the points
   const smoothedPoints = smoothPoints(points);
@@ -138,20 +138,24 @@ export function recognizeShape(
  * Process a batch of shapes for recognition
  */
 export function batchRecognizeShapes(
-  shapes: Shape[], 
+  prevShapes: Shape[] | any, 
   onlyFreedraws: boolean = true
 ): RecognizedShapeResult[] {
   const results: RecognizedShapeResult[] = [];
   
   // Ensure shapes is an array before iteration
-  if (!Array.isArray(shapes)) {
-    console.error('batchRecognizeShapes received non-array shapes', shapes);
+  const shapes = Array.isArray(prevShapes) ? prevShapes : [];
+  if (!Array.isArray(prevShapes)) {
+    console.error('batchRecognizeShapes received non-array shapes', prevShapes);
     return results;
   }
   
   for (const shape of shapes) {
     // Skip if shape is invalid or not properly formed
-    if (!shape || !shape.points || !Array.isArray(shape.points)) continue;
+    if (!shape || !shape.points || !Array.isArray(shape.points)) {
+      console.warn('Invalid shape found in batchRecognizeShapes', shape);
+      continue;
+    }
     
     // Only process freedraw shapes if flag is set
     if (onlyFreedraws && shape.type !== 'freedraw') continue;
@@ -173,6 +177,12 @@ export function isMathExpression(points: Point[], tolerance: number = 0.3): {
   isMath: boolean;
   confidence: number;
 } {
+  // Ensure points is an array
+  if (!Array.isArray(points)) {
+    console.error('isMathExpression received non-array points', points);
+    return { isMath: false, confidence: 0 };
+  }
+  
   // This would use heuristics to determine if the drawing looks like math
   // For example, checking for patterns like horizontal lines (equals signs),
   // vertical alignment, and symbol spacing that's common in equations

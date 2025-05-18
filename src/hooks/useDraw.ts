@@ -12,6 +12,8 @@ export default function useDraw() {
   const strokeStyle = useStore((state) => state.strokeStyle);
   const currentUser = useStore((state) => state.currentUser);
   const { processDrawOperation } = useCollaboration();
+  // Initialize the useUndoRedo hook at the top level
+  const { saveToHistory } = useUndoRedo();
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPath, setCurrentPath] = useState<Point[]>([]);
@@ -109,7 +111,9 @@ export default function useDraw() {
         tool: tool,
       });
 
-      setShapes([...shapes, newShape]);
+      // Ensure shapes is an array
+      const currentShapes = Array.isArray(shapes) ? shapes : [];
+      setShapes([...currentShapes, newShape]);
     },
     [shapes, setShapes, tool, strokeStyle, currentUser, generateId, processDrawOperation]
   );
@@ -121,79 +125,79 @@ export default function useDraw() {
 
       setCurrentPath((prev) => [...prev, point]);
 
-      // Update shape based on tool
-      setShapes((prevShapes) => {
-        const shapeIndex = prevShapes.findIndex(
-          (s) => s.id === currentShapeId.current
-        );
-        if (shapeIndex === -1) return prevShapes;
+      // Ensure shapes is an array before updating
+      const currentShapes = Array.isArray(shapes) ? shapes : [];
+      const shapeIndex = currentShapes.findIndex(
+        (s) => s.id === currentShapeId.current
+      );
+      
+      if (shapeIndex === -1) return;
 
-        const shape = prevShapes[shapeIndex];
-        let updatedShape: Shape;
+      const shape = currentShapes[shapeIndex];
+      let updatedShape: Shape;
 
-        switch (tool) {
-          case "freedraw":
-            updatedShape = {
-              ...shape,
-              points: [...shape.points, point],
-            };
-            break;
-          case "line":
-            updatedShape = {
-              ...shape,
-              endPoint: point,
-              points: [shape.points[0], point],
-            };
-            break;
-          case "rectangle": {
-            const startPoint = shape.points[0];
-            updatedShape = {
-              ...shape,
-              width: point.x - startPoint.x,
-              height: point.y - startPoint.y,
-              points: [
-                startPoint,
-                { x: point.x, y: startPoint.y },
-                point,
-                { x: startPoint.x, y: point.y },
-              ],
-            };
-            break;
-          }
-          case "ellipse": {
-            const centerPoint = shape.points[0];
-            updatedShape = {
-              ...shape,
-              radiusX: Math.abs(point.x - centerPoint.x),
-              radiusY: Math.abs(point.y - centerPoint.y),
-              points: [centerPoint, point],
-            };
-            break;
-          }
-          case "arrow":
-            updatedShape = {
-              ...shape,
-              endPoint: point,
-              points: [shape.points[0], point],
-            };
-            break;
-          default:
-            return prevShapes;
+      switch (tool) {
+        case "freedraw":
+          updatedShape = {
+            ...shape,
+            points: [...shape.points, point],
+          };
+          break;
+        case "line":
+          updatedShape = {
+            ...shape,
+            endPoint: point,
+            points: [shape.points[0], point],
+          };
+          break;
+        case "rectangle": {
+          const startPoint = shape.points[0];
+          updatedShape = {
+            ...shape,
+            width: point.x - startPoint.x,
+            height: point.y - startPoint.y,
+            points: [
+              startPoint,
+              { x: point.x, y: startPoint.y },
+              point,
+              { x: startPoint.x, y: point.y },
+            ],
+          };
+          break;
         }
+        case "ellipse": {
+          const centerPoint = shape.points[0];
+          updatedShape = {
+            ...shape,
+            radiusX: Math.abs(point.x - centerPoint.x),
+            radiusY: Math.abs(point.y - centerPoint.y),
+            points: [centerPoint, point],
+          };
+          break;
+        }
+        case "arrow":
+          updatedShape = {
+            ...shape,
+            endPoint: point,
+            points: [shape.points[0], point],
+          };
+          break;
+        default:
+          return;
+      }
 
-        // Send operation to collaborators
-        processDrawOperation({
-          type: "mousemove",
-          point,
-          shapeId: currentShapeId.current,
-        });
-
-        const newShapes = [...prevShapes];
-        newShapes[shapeIndex] = updatedShape;
-        return newShapes;
+      // Send operation to collaborators
+      processDrawOperation({
+        type: "mousemove",
+        point,
+        shapeId: currentShapeId.current,
       });
+
+      const newShapes = [...currentShapes];
+      newShapes[shapeIndex] = updatedShape;
+      setShapes(newShapes);
     },
-    [isDrawing, setShapes, tool, processDrawOperation, strokeStyle]
+    [isDrawing, shapes, setShapes, tool, processDrawOperation]
   );
 
   // Handle mouse up event
@@ -202,60 +206,60 @@ export default function useDraw() {
       if (!isDrawing) return;
 
       setIsDrawing(false);
+      
+      // Ensure shapes is an array before updating
+      const currentShapes = Array.isArray(shapes) ? shapes : [];
+      const shapeIndex = currentShapes.findIndex(
+        (s) => s.id === currentShapeId.current
+      );
+      
+      if (shapeIndex === -1) return;
 
-      // Finalize shape
-      setShapes((prevShapes) => {
-        const shapeIndex = prevShapes.findIndex(
-          (s) => s.id === currentShapeId.current
-        );
-        if (shapeIndex === -1) return prevShapes;
+      const shape = currentShapes[shapeIndex];
+      let finalShape = shape;
 
-        const shape = prevShapes[shapeIndex];
-        let finalShape = shape;
-
-        // For freedraw, try to recognize shape if it's a simple geometry
-        if (
-          tool === "freedraw" &&
-          shape.points.length > 2 &&
-          shape.points.length < 50
-        ) {
-          const recognizedShape = recognizeShape(shape);
-          if (recognizedShape && recognizedShape.confidence > 0.85) {
-            finalShape = {
-              ...recognizedShape.recognizedShape,
-              id: shape.id,
-              createdAt: shape.createdAt,
-              createdBy: shape.createdBy,
-              style: shape.style,
-            };
-          }
+      // For freedraw, try to recognize shape if it's a simple geometry
+      if (
+        tool === "freedraw" &&
+        shape.points.length > 2 &&
+        shape.points.length < 50
+      ) {
+        const recognizedShape = recognizeShape(shape);
+        if (recognizedShape && recognizedShape.confidence > 0.85) {
+          finalShape = {
+            ...recognizedShape.recognizedShape,
+            id: shape.id,
+            createdAt: shape.createdAt,
+            createdBy: shape.createdBy,
+            style: shape.style,
+          };
         }
+      }
 
-        // Create new array with updated shape
-        const newShapes = [...prevShapes];
-        newShapes[shapeIndex] = finalShape;
+      // Create new array with updated shape
+      const newShapes = [...currentShapes];
+      newShapes[shapeIndex] = finalShape;
 
-        // Send operation to collaborators
-        processDrawOperation({
-          type: "mouseup",
-          point,
-          shapeId: currentShapeId.current,
-        });
-
-        // Save to history after a small delay to ensure state is settled
-        setTimeout(() => {
-          const { saveToHistory } = useUndoRedo();
-          saveToHistory(newShapes);
-        }, 0);
-
-        return newShapes;
+      // Send operation to collaborators
+      processDrawOperation({
+        type: "mouseup",
+        point,
+        shapeId: currentShapeId.current,
       });
+      
+      // Update the shapes state
+      setShapes(newShapes);
+
+      // Save to history after a small delay to ensure state is settled
+      setTimeout(() => {
+        saveToHistory(newShapes);
+      }, 0);
 
       // Clear current path
       setCurrentPath([]);
       currentShapeId.current = "";
     },
-    [isDrawing, setShapes, tool, processDrawOperation, useUndoRedo, strokeStyle]
+    [isDrawing, shapes, setShapes, tool, processDrawOperation, saveToHistory]
   );
 
   return {
