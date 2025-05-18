@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useStore } from "@/store";
 import { recognizeShape } from "@/lib/ai/shapeRecognition";
 import { Point, Shape, Tool, StrokeStyle } from "@/types/types";
@@ -17,6 +17,12 @@ export default function useDraw() {
   const [currentPath, setCurrentPath] = useState<Point[]>([]);
   const currentShapeId = useRef<string>("");
 
+  // Debug current tool and stroke style
+  useEffect(() => {
+    console.log("useDraw - Current tool:", tool);
+    console.log("useDraw - Current stroke style:", strokeStyle);
+  }, [tool, strokeStyle]);
+
   // Generate a unique ID
   const generateId = useCallback(() => {
     return (
@@ -28,7 +34,12 @@ export default function useDraw() {
   // Handle mouse down event
   const handleMouseDown = useCallback(
     (point: Point) => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        console.warn("No current user, cannot draw");
+        return;
+      }
+
+      console.log("Starting to draw with tool:", tool);
 
       setIsDrawing(true);
       setCurrentPath([point]);
@@ -39,7 +50,7 @@ export default function useDraw() {
       const baseShape = {
         id: currentShapeId.current,
         points: [point],
-        style: strokeStyle,
+        style: { ...strokeStyle }, // Clone to avoid reference issues
         createdAt: Date.now(),
         createdBy: currentUser?.id || "unknown",
       };
@@ -182,7 +193,7 @@ export default function useDraw() {
         return newShapes;
       });
     },
-    [isDrawing, setShapes, tool, processDrawOperation]
+    [isDrawing, setShapes, tool, processDrawOperation, strokeStyle]
   );
 
   // Handle mouse up event
@@ -244,7 +255,7 @@ export default function useDraw() {
       setCurrentPath([]);
       currentShapeId.current = "";
     },
-    [isDrawing, setShapes, tool, processDrawOperation, useUndoRedo]
+    [isDrawing, setShapes, tool, processDrawOperation, useUndoRedo, strokeStyle]
   );
 
   return {

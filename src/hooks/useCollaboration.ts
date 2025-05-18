@@ -76,7 +76,7 @@ export default function useCollaboration() {
   
   // Process and sync draw operations
   const processDrawOperation = useCallback((drawOp: DrawOperation) => {
-    if (!currentUser) return;
+    if (!currentUser || !socketClient.isConnected()) return;
     
     // Create operation to sync
     const operation: Operation = {
@@ -94,14 +94,14 @@ export default function useCollaboration() {
   
   // Update cursor position
   const updateCursor = useCallback((position: {x: number, y: number}) => {
-    if (!currentUser) return;
+    if (!currentUser || !socketClient.isConnected()) return;
     
     socketClient.sendCursorUpdate(currentUser.id, position);
   }, [currentUser]);
   
   // Sync local changes with collaborators
   const syncChanges = useCallback(() => {
-    if (!currentUser || shapes.length === 0) return;
+    if (!currentUser || shapes.length === 0 || !socketClient.isConnected()) return;
     
     // Create diff of current and last synced shapes
     const operations = createDiff(lastSyncedShapes.current, shapes, currentUser.id);

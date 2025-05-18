@@ -83,6 +83,17 @@ async function evaluateMathExpression(expression: string): Promise<{result: stri
  * Batch process multiple shapes to find and solve math expressions
  */
 export function findAndProcessMathShapes(shapes: Shape[]): Promise<MathResult[]> {
-  const mathShapes = shapes.filter(shape => shape.type === 'math') as MathShape[];
-  return Promise.all(mathShapes.map(processMathShape));
+  // Handle case where shapes is not an array
+  if (!Array.isArray(shapes)) {
+    console.error('findAndProcessMathShapes received non-array shapes', shapes);
+    return Promise.resolve([]);
+  }
+  
+  try {
+    const mathShapes = shapes.filter(shape => shape && shape.type === 'math') as MathShape[];
+    return Promise.all(mathShapes.map(processMathShape));
+  } catch (error) {
+    console.error('Error processing math shapes:', error);
+    return Promise.resolve([]);
+  }
 }

@@ -15,9 +15,32 @@ const Canvas = forwardRef<HTMLCanvasElement, CanvasProps>(({ width, height }, fo
   const tool = useStore(state => state.tool);
   const viewport = useStore(state => state.viewport);
   const [pointerPosition, setPointerPosition] = useState<Point | null>(null);
+  const [cursorStyle, setCursorStyle] = useState<string>("crosshair");
 
   const { handleMouseDown, handleMouseMove, handleMouseUp, isDrawing } = useDraw();
   const { updateCursor } = useCollaboration();
+
+  // Update cursor style based on the selected tool
+  useEffect(() => {
+    console.log("Tool changed to:", tool);
+    // Set appropriate cursor for each tool
+    switch(tool) {
+      case 'select':
+        setCursorStyle("default");
+        break;
+      case 'pan':
+        setCursorStyle("grab");
+        break;
+      case 'eraser':
+        setCursorStyle("no-drop");
+        break;
+      case 'text':
+        setCursorStyle("text");
+        break;
+      default:
+        setCursorStyle("crosshair");
+    }
+  }, [tool]);
 
   // Transform mouse coordinates based on viewport
   const transformCoordinates = (clientX: number, clientY: number): Point => {
@@ -146,6 +169,7 @@ const Canvas = forwardRef<HTMLCanvasElement, CanvasProps>(({ width, height }, fo
       className="cursor-crosshair touch-none"
       style={{
         backgroundColor: '#f9f9f9',
+        cursor: cursorStyle, // Apply dynamic cursor style
       }}
     />
   );

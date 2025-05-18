@@ -43,6 +43,13 @@ const Renderer: React.FC<RendererProps> = ({ width, height, canvasRef: externalC
     // Draw grid
     drawGrid(ctx, canvas.width / viewport.scale, canvas.height / viewport.scale);
     
+    // Ensure shapes is an array before iteration
+    if (!Array.isArray(shapes)) {
+      console.error('Renderer received non-array shapes', shapes);
+      ctx.restore();
+      return;
+    }
+    
     // Draw all shapes
     shapes.forEach((shape) => {
       drawShape(ctx, shape, shape.id === selectedShapeId);
@@ -110,7 +117,16 @@ const Renderer: React.FC<RendererProps> = ({ width, height, canvasRef: externalC
   
   // Helper function to draw math results
   const drawMathResults = (ctx: CanvasRenderingContext2D) => {
+    // Ensure mathResults is an array before iteration
+    if (!Array.isArray(mathResults)) {
+      console.error('mathResults is not an array', mathResults);
+      return;
+    }
+
     mathResults.forEach((result) => {
+      // Skip if shapes is not an array
+      if (!Array.isArray(shapes)) return;
+
       const mathShape = shapes.find(s => s.id === result.shapeId);
       if (!mathShape || mathShape.type !== 'math') return;
       

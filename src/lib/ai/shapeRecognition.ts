@@ -143,13 +143,26 @@ export function batchRecognizeShapes(
 ): RecognizedShapeResult[] {
   const results: RecognizedShapeResult[] = [];
   
+  // Ensure shapes is an array before iteration
+  if (!Array.isArray(shapes)) {
+    console.error('batchRecognizeShapes received non-array shapes', shapes);
+    return results;
+  }
+  
   for (const shape of shapes) {
+    // Skip if shape is invalid or not properly formed
+    if (!shape || !shape.points || !Array.isArray(shape.points)) continue;
+    
     // Only process freedraw shapes if flag is set
     if (onlyFreedraws && shape.type !== 'freedraw') continue;
     
-    const result = recognizeShape(shape.points, shape.style, shape.createdBy);
-    if (result) {
-      results.push(result);
+    try {
+      const result = recognizeShape(shape.points, shape.style, shape.createdBy);
+      if (result) {
+        results.push(result);
+      }
+    } catch (error) {
+      console.error('Error recognizing shape:', error, shape);
     }
   }
   

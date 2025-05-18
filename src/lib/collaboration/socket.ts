@@ -136,6 +136,11 @@ class WebSocketClient {
     }
   }
 
+  // Check if connected to WebSocket server and session
+  isConnected(): boolean {
+    return this.socket !== null && this.socket.connected && this.sessionId !== null;
+  }
+
   // Update the vector clock based on received message
   private updateVectorClock(remoteVectorClock?: VectorClock) {
     if (!remoteVectorClock) return;

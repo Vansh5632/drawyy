@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '@/store';
 import { Tool, StrokeStyle } from '@/types/types';
 
@@ -7,6 +7,12 @@ const Toolbar: React.FC = () => {
   const setTool = useStore(state => state.setTool);
   const strokeStyle = useStore(state => state.strokeStyle);
   const setStrokeStyle = useStore(state => state.setStrokeStyle);
+
+  // Debug logger for current state
+  useEffect(() => {
+    console.log('Current tool:', tool);
+    console.log('Current stroke style:', strokeStyle);
+  }, [tool, strokeStyle]);
 
   const tools: { id: Tool; name: string; icon: string }[] = [
     { id: 'select', name: 'Select', icon: '🔍' },
@@ -34,19 +40,23 @@ const Toolbar: React.FC = () => {
   const strokeWidths = [1, 2, 4, 6, 8, 12];
 
   const handleToolChange = (newTool: Tool) => {
+    console.log('Tool clicked:', newTool);
     setTool(newTool);
   };
 
   const handleColorChange = (color: string) => {
+    console.log('Color clicked:', color);
     setStrokeStyle({ color });
   };
 
   const handleWidthChange = (width: number) => {
+    console.log('Width clicked:', width);
     setStrokeStyle({ width });
   };
 
   const handleOpacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const opacity = parseFloat(e.target.value);
+    console.log('Opacity changed:', opacity);
     setStrokeStyle({ opacity });
   };
 
