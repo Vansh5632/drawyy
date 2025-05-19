@@ -156,19 +156,19 @@ const Toolbar: React.FC = () => {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
               className={`p-2 rounded-lg transition-colors ${
-                strokeStyle.width === width
-                  ? 'bg-blue-500 text-white'
-                  : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+              strokeStyle.width === width
+              ? 'bg-blue-500 text-white'
+              : 'hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
               onClick={() => handleWidthChange(width)}
               title={`${width}px`}
             >
               <div
-                className="rounded-full bg-black dark:bg-white"
-                style={{
-                  width: Math.min(24, Math.max(8, width * 2)),
-                  height: Math.min(24, Math.max(8, width * 2)),
-                }}
+              className={`rounded-full ${isDarkMode ? 'bg-white' : 'bg-black'}`}
+              style={{
+              width: Math.min(24, Math.max(8, width * 2)),
+              height: Math.min(24, Math.max(8, width * 2)),
+              }}
               />
             </motion.button>
           ))}

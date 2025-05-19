@@ -44,7 +44,7 @@ export default function Home() {
       <Header canvasRef={canvasRef} />
       
       <div className="flex flex-1 overflow-hidden">
-        <div className="w-64 p-4 border-r">
+        <div className="w-100 p-4 border-r">
           <Toolbar />
           
           {/* Show math helper when math tool is selected */}
